@@ -1,20 +1,25 @@
 # BitMEX Market Watcher
 
-Store and utilize [BitMEX](https://www.bitmex.com) public data using MongoDB.
+Store and utilize [BitMEX](https://www.bitmex.com) market data.
+
+[![GPL-3.0](https://img.shields.io/github/license/yanagisawa-kentaro-777/bitmex_watcher.svg)](LICENSE)
 
 ## Features
 
-This is a market watcher program for use with [BitMEX](https://www.bitmex.com).
+This is a market watcher program for use with BitMEX.
+It is intended to be a data feeder for trading bots.
+(At least I myself am using this as such for months.)
+
 It provides the following functions:
 
 * Fetches snapshot of current order books and recent trade records
 from [BitMEX WebSocket API](https://www.bitmex.com/app/wsAPI).
-* Saves the data to MongoDB.
-* Publishes the update by Redis.
+* Saves the data to [MongoDB](https://www.mongodb.com/).
+* Notifies the update to subscribing programs (e.g. bots) using [Redis](https://redis.io/).
 
-This program does not require authentication. No API keys or secrets needed.
+This program does not require authentication. No BitMEX API keys or secrets needed.
 
-> The author is not responsible for any losses incurred by using this code.
+*The author is not responsible for any losses incurred by using this code.*
 
 ## Getting started
 
