@@ -146,7 +146,7 @@ class TradesCursor:
         return self.trd_match_id < trade.trd_match_id
 
     def __str__(self):
-        return "(%s : %s)".format(self.timestamp.strftime(constants.DATE_FORMAT), self.trd_match_id)
+        return "({} : {})".format(self.timestamp.strftime(constants.DATE_FORMAT), self.trd_match_id)
 
     def to_dict(self):
         return {
