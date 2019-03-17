@@ -1,0 +1,21 @@
+# Docker related files.
+Dockerfile
+docker-compose.yml
+# Docs.
+doc/
+README.md
+LICENSE
+# Git related files.
+.git
+.gitignore
+# Tests.
+requirements_dev.txt
+/**/tests
+# Cache objects.
+/**/*.pyc
+/**/__pycache__
+# Environments.
+venv/
+.idea/
+# Log files.
+*.log
