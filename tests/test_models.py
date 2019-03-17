@@ -24,8 +24,11 @@ class TestOrderBookSnapshot(unittest.TestCase):
         self.assertEqual(depth.bids_ratio, d["bidsRatio"])
         self.assertEqual(depth.total_volume, d["totalVolume"])
 
-    def test_2(self):
-        self.assertEqual(1, 1)
+        dt20000101000000 = datetime.strptime("2000-01-01 00:00:00", '%Y-%m-%d %H:%M:%S').astimezone(constants.TIMEZONE)
+        depth2 = OrderBookSnapshot(dt20000101000000, bids, asks, 25)
+        self.assertEqual(depth.digest_string(), depth2.digest_string())
+
+        self.assertTrue(0 < len(str(depth)))
 
 
 class TestTrade(unittest.TestCase):
@@ -51,3 +54,37 @@ class TestTrade(unittest.TestCase):
         self.assertEqual(trade.bought_size, d["boughtSize"])
         self.assertEqual(trade.sold_size, d["soldSize"])
 
+        trade2 = Trade("test_id", datetime.now().astimezone(constants.TIMEZONE), "Sell", 11000.5, 100)
+        self.assertEqual(100, trade2.size)
+        self.assertEqual(0, trade2.bought_size)
+        self.assertEqual(100, trade2.sold_size)
+
+        self.assertTrue(0 < len(str(trade)))
+
+
+class TestTradesCursor(unittest.TestCase):
+
+    def test1(self):
+        from bitmex_watcher.utils import constants
+        from bitmex_watcher.models import Trade, TradesCursor
+
+        dt20190317115959 = datetime.strptime("2019-03-17 11:59:59", '%Y-%m-%d %H:%M:%S').astimezone(constants.TIMEZONE)
+        dt20190317120000 = datetime.strptime("2019-03-17 12:00:00", '%Y-%m-%d %H:%M:%S').astimezone(constants.TIMEZONE)
+        dt20190317120001 = datetime.strptime("2019-03-17 12:00:01", '%Y-%m-%d %H:%M:%S').astimezone(constants.TIMEZONE)
+        cursor = TradesCursor(dt20190317120000, "x")
+        self.assertEqual(dt20190317120000, cursor.to_dict()["timestamp"])
+        self.assertEqual("x", cursor.to_dict()["trdMatchID"])
+
+        trade0 = Trade("z", dt20190317115959, "Buy", 3000000, 100)
+        self.assertFalse(cursor.is_behind_of(trade0))
+
+        trade1 = Trade("x", dt20190317120000, "Buy", 3000000, 100)
+        self.assertFalse(cursor.is_behind_of(trade1))
+
+        trade2 = Trade("y", dt20190317120000, "Buy", 3000000, 100)
+        self.assertTrue(cursor.is_behind_of(trade2))
+
+        trade3 = Trade("a", dt20190317120001, "Buy", 3000000, 100)
+        self.assertTrue(cursor.is_behind_of(trade3))
+
+        self.assertTrue(0 < len(str(cursor)))

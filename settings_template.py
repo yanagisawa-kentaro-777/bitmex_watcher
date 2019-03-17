@@ -11,6 +11,7 @@ REDIS_PORT = 6379
 REDIS_DB = 0
 
 LOOP_INTERVAL = 1.5
+MAX_IDLE_COUNT = 10
 
 # If this flag is set True, sample_subscriber.py (it does nothing meaningful.) is executed in another thread.
 ENABLE_SAMPLE_SUBSCRIBER = False

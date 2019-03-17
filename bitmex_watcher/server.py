@@ -189,9 +189,8 @@ class MarketWatcher:
                                 new_trades[-1].timestamp.strftime(constants.DATE_FORMAT))
                     insert_result = self.trades_collection.insert_many([t.to_dict() for t in new_trades])
                     trades_cursor = TradesCursor(new_trades[-1].timestamp, new_trades[-1].trd_match_id)
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug("%d trades inserted. The last: %s",
-                                     len(insert_result.inserted_ids), str(trades_cursor))
+                    logger.info("%d trades inserted. The last: %s",
+                                len(insert_result.inserted_ids), str(trades_cursor))
                     self.save_trades_cursor(trades_cursor)
                 else:
                     logger.info("NO new trades.")
@@ -200,12 +199,12 @@ class MarketWatcher:
                 timestamp = datetime.now().astimezone(constants.TIMEZONE)
                 order_books = self.bitmex_client.order_books()
                 order_book_snapshot = MarketWatcher.create_order_book_snapshot(timestamp, order_books)
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("OrderBookSnapshot: %s" % str(order_book_snapshot))
 
                 prev_digest = order_book_digest
                 order_book_digest = order_book_snapshot.digest_string()
 
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug("OrderBookSnapshot: %s" % str(order_book_snapshot))
                 if prev_digest == order_book_digest:
                     order_book_snapshot_id = "*"
                     logger.info("Order book digest has NOT changed.")
@@ -213,7 +212,7 @@ class MarketWatcher:
                     # Save the order book snapshot to MongoDB.
                     insert_result = self.order_book_snapshot_collection.insert_one(order_book_snapshot.to_dict())
                     order_book_snapshot_id = str(insert_result.inserted_id)
-                    logger.info("Order book snapshot is inserted: %s" % order_book_snapshot_id)
+                    logger.info("A new order book snapshot is inserted: %s" % order_book_snapshot_id)
 
                 if (0 < len(new_trades)) or (prev_digest != order_book_digest):
                     # At least either trades or order books were updated.
@@ -224,12 +223,15 @@ class MarketWatcher:
                     # No new data has arrived for LOOP_INTERVAL seconds.
                     idle_count += 1
                     logger.info("Nothing to publish. Count=%d" % idle_count)
+                    if settings.MAX_IDLE_COUNT < idle_count:
+                        logger.error("Communication trouble? Aborting. IdleCount=%d" % idle_count)
+                        break
 
-                # Sleep for the main loop.
+                # Sleep in the main loop.
                 sleep(settings.LOOP_INTERVAL)
         except Exception as e:
-            logger.warn("Error: %s" % str(e))
-            logger.warn(sys.exc_info())
+            logger.error("Error: %s" % str(e))
+            logger.error(sys.exc_info())
             raise e
         finally:
             self.exit()
