@@ -5,6 +5,8 @@ Store and utilize [BitMEX](https://www.bitmex.com) market data.
 [![GPL-3.0](https://img.shields.io/github/license/yanagisawa-kentaro-777/bitmex_watcher.svg)](LICENSE)
 [![Docker Cloud Automated build](https://img.shields.io/docker/cloud/automated/yanagisawakentaro/bitmex_watcher.svg)](https://hub.docker.com/r/yanagisawakentaro/bitmex_watcher/)
 [![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/yanagisawakentaro/bitmex_watcher.svg)](https://hub.docker.com/r/yanagisawakentaro/bitmex_watcher/)
+[![Code Climate maintainability](https://img.shields.io/codeclimate/maintainability/yanagisawa-kentaro-777/bitmex_watcher.svg)]()
+[![Code Climate debt](https://img.shields.io/codeclimate/tech-debt/yanagisawa-kentaro-777/bitmex_watcher.svg)]()
 
 ## Features
 
