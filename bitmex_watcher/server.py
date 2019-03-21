@@ -81,16 +81,14 @@ class MarketWatcher:
     def sanity_check(self):
         # Ensure market is open.
         if not self.bitmex_client.is_market_open():
+            logger.error("Market is NOT open: %s" % self.bitmex_client.get_instrument()["state"])
             raise errors.MarketClosedError()
 
     def exit(self):
         if not self.is_running:
             return
 
-        logger.info("******************")
         logger.info('SHUTTING DOWN BitMEX Watcher. Version %s' % constants.VERSION)
-        logger.info("******************")
-
         try:
             self.redis.shutdown()
         except Exception as e:
@@ -238,9 +236,7 @@ class MarketWatcher:
 
 
 def start():
-    logger.info("##################")
     logger.info('STARTING BitMEX Watcher. Version %s' % constants.VERSION)
-    logger.info("##################")
 
     # Try/except just keeps ctrl-c from printing an ugly stacktrace
     try:
