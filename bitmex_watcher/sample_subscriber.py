@@ -59,6 +59,7 @@ class SampleSubscriber:
                           'total_volume': {'$sum': '$size'},
                           'bought_volume': {'$sum': '$boughtSize'},
                           'sold_volume': {'$sum': '$soldSize'},
+                          'market_momentum': {'$sum': '$momentum'},
                           'average_price': {'$avg': '$price'},
                           'sd_of_price': {'$stdDevPop': '$price'},
                           'min_price': {'$min': '$price'},
@@ -68,12 +69,9 @@ class SampleSubscriber:
                 ]
                 rows = self.trades_collection.aggregate(pipeline=trades_pipeline)
                 for row in rows:
-                    bought_vol = row['bought_volume']
-                    sold_vol = row['sold_volume']
-                    market_momentum = bought_vol - sold_vol
                     logger.info(
                         "[SUB] %d trade vol. MarketMomentum: %d (%d - %d). Avg price: %.2f, SD: %.2f, [%.1f - %.1f]",
-                        row['total_volume'], market_momentum, bought_vol, sold_vol,
+                        row['total_volume'], row['market_momentum'], row['bought_volume'], row['sold_volume'],
                         row['average_price'], row['sd_of_price'], row['min_price'], row['max_price'])
             except Exception as e:
                 logger.error(e)

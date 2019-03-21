@@ -114,6 +114,7 @@ class Trade:
         else:
             self.sold_size = self.size
             self.bought_size = 0
+        self.momentum = self.bought_size - self.sold_size
 
     def __str__(self):
         return str(self.to_dict())
@@ -126,7 +127,8 @@ class Trade:
             'price': self.price,
             'size': self.size,
             "boughtSize": self.bought_size,
-            "soldSize": self.sold_size
+            "soldSize": self.sold_size,
+            "momentum": self.momentum
         }
 
 
