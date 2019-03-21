@@ -89,22 +89,15 @@ class MarketWatcher:
             return
 
         logger.info('SHUTTING DOWN BitMEX Watcher. Version %s' % constants.VERSION)
-        try:
-            self.redis.shutdown()
-        except Exception as e:
-            logger.info("Unable to close redis client: %s" % e)
 
         try:
             self.mongo_client.close()
         except Exception as e:
             logger.info("Unable to close MongoDB client: %s" % e)
-
         try:
             self.bitmex_client.close()
-        except errors.AuthenticationError:
-            logger.info("Was not authenticated; could not cancel orders.")
         except Exception as e:
-            logger.info("Unable to cancel orders: %s" % e)
+            logger.info("Unable to close Bitmex client: %s" % e)
 
         # Now the clients are all down.
         self.is_running = False
