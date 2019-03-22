@@ -84,7 +84,7 @@ class MarketWatcher:
             logger.error("Market is NOT open: %s" % self.bitmex_client.get_instrument()["state"])
             raise errors.MarketClosedError()
 
-    def exit(self):
+    def exit(self, p1=None, p2=None, p3=None):
         if not self.is_running:
             return
 
@@ -230,7 +230,6 @@ class MarketWatcher:
 
 def start():
     logger.info('STARTING BitMEX Watcher. Version %s' % constants.VERSION)
-
     # Try/except just keeps ctrl-c from printing an ugly stacktrace
     try:
         watcher = MarketWatcher()
