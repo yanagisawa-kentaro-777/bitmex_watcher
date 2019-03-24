@@ -39,9 +39,10 @@ class BitMEXClient:
         if self.ws_client is not None:
             self.ws_client.exit()
 
-    def is_market_open(self):
+    def is_market_in_normal_state(self):
         instrument = self.get_instrument()
-        return instrument["state"] == "Open"
+        state = instrument["state"]
+        return state == "Open" or state == "Closed"
 
     def get_instrument(self):
         return self.ws_client.get_instrument()
