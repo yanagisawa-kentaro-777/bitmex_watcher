@@ -80,8 +80,8 @@ class MarketWatcher:
 
     def sanity_check(self):
         # Ensure market is open.
-        if not self.bitmex_client.is_market_open():
-            logger.error("Market is NOT open: %s" % self.bitmex_client.get_instrument()["state"])
+        if not self.bitmex_client.is_market_in_normal_state():
+            logger.error("Market is NOT in normal state: %s" % self.bitmex_client.get_instrument()["state"])
             raise errors.MarketClosedError()
 
     def exit(self, p1=None, p2=None, p3=None):
