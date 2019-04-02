@@ -133,6 +133,16 @@ class MarketWatcher:
             new_trades = all_trades[i:]
         return new_trades
 
+    @staticmethod
+    def is_healthy(order_book_snapshot):
+        if 0.5 != order_book_snapshot.lowest_ask - order_book_snapshot.highest_bid:
+            return False
+        if settings.MAX_ORDERS_OF_EACH_SIDE != len(order_book_snapshot.bids):
+            return False
+        if settings.MAX_ORDERS_OF_EACH_SIDE != len(order_book_snapshot.asks):
+            return False
+        return True
+
     def load_trades_cursor(self):
         data = self.trades_cursor_collection.find_one()
         if data is None:
@@ -192,6 +202,9 @@ class MarketWatcher:
                 order_book_snapshot = MarketWatcher.create_order_book_snapshot(timestamp, order_books)
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("OrderBookSnapshot: %s" % str(order_book_snapshot))
+                if not MarketWatcher.is_healthy(order_book_snapshot):
+                    logger.error("OrderBookSnapshot corrupted: %s" % str(order_book_snapshot))
+                    break
 
                 prev_digest = order_book_digest
                 order_book_digest = order_book_snapshot.digest_string()
@@ -205,7 +218,7 @@ class MarketWatcher:
                     order_book_snapshot_id = str(insert_result.inserted_id)
                     logger.info("A new order book snapshot is inserted: %s" % order_book_snapshot_id)
 
-                if (0 < len(new_trades)) or (prev_digest != order_book_digest):
+                if (0 < len(new_trades)) and (prev_digest != order_book_digest):
                     # At least either trades or order books were updated.
                     idle_count = 0
                     self.redis.publish("orderBookSnapshotID", order_book_snapshot_id)
