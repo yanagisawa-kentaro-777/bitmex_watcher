@@ -135,11 +135,11 @@ class MarketWatcher:
 
     @staticmethod
     def is_healthy(order_book_snapshot):
-        if 0.5 != order_book_snapshot.lowest_ask - order_book_snapshot.highest_bid:
+        if order_book_snapshot.lowest_ask <= order_book_snapshot.highest_bid:
             return False
-        if settings.MAX_ORDERS_OF_EACH_SIDE != len(order_book_snapshot.bids):
+        if settings.MAX_ORDERS_OF_EACH_SIDE < len(order_book_snapshot.bids):
             return False
-        if settings.MAX_ORDERS_OF_EACH_SIDE != len(order_book_snapshot.asks):
+        if settings.MAX_ORDERS_OF_EACH_SIDE < len(order_book_snapshot.asks):
             return False
         return True
 
