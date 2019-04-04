@@ -218,17 +218,21 @@ class MarketWatcher:
                     order_book_snapshot_id = str(insert_result.inserted_id)
                     logger.info("A new order book snapshot is inserted: %s" % order_book_snapshot_id)
 
-                if (0 < len(new_trades)) and (prev_digest != order_book_digest):
-                    # At least either trades or order books were updated.
-                    idle_count = 0
+                if prev_digest != order_book_digest:
+                    # We publish the updated order book snapshot.
                     self.redis.publish("orderBookSnapshotID", order_book_snapshot_id)
                     logger.info("Published to redis: %s" % order_book_snapshot_id)
+
+                if (0 < len(new_trades)) and (prev_digest != order_book_digest):
+                    # Both order books and trades are updated. This is what we expect to happen normally.
+                    idle_count = 0
                 else:
-                    # No new data has arrived for LOOP_INTERVAL seconds.
+                    # Either data has not been updated for LOOP_INTERVAL seconds.
+                    # Is market unusually calm or, which is more likely, ws communication trouble took place?
                     idle_count += 1
-                    logger.info("Nothing to publish. Count=%d" % idle_count)
+                    logger.info("Either data is not updated. Count=%d" % idle_count)
                     if settings.MAX_IDLE_COUNT < idle_count:
-                        logger.error("Communication trouble? Aborting. IdleCount=%d" % idle_count)
+                        logger.error("WS communication trouble? Aborting. IdleCount=%d" % idle_count)
                         break
 
                 # Sleep in the main loop.
