@@ -164,8 +164,8 @@ class MarketWatcher:
     def run_loop(self):
         try:
             order_book_digest = ""
-            idle_count = 0
-
+            orders_idle_count = 0
+            trades_idle_count = 0
             trades_cursor = self.load_trades_cursor()
             while True:
                 logger.info("LOOP[%s] (%s)" % (self.instance_name, constants.VERSION))
@@ -184,6 +184,7 @@ class MarketWatcher:
 
                 new_trades = MarketWatcher.filter_new_trades(trades_cursor, trades)
                 if 0 < len(new_trades):
+                    trades_idle_count = 0
                     logger.info("%d new trades. [%s - %s]",
                                 len(new_trades),
                                 new_trades[0].timestamp.strftime(constants.DATE_FORMAT),
@@ -194,6 +195,7 @@ class MarketWatcher:
                                 len(insert_result.inserted_ids), str(trades_cursor))
                     self.save_trades_cursor(trades_cursor)
                 else:
+                    trades_idle_count += 1
                     logger.info("NO new trades.")
 
                 # Fetch order books.
@@ -210,30 +212,24 @@ class MarketWatcher:
                 order_book_digest = order_book_snapshot.digest_string()
 
                 if prev_digest == order_book_digest:
-                    order_book_snapshot_id = "*"
+                    orders_idle_count += 1
                     logger.info("Order book digest has NOT changed.")
                 else:
+                    orders_idle_count = 0
                     # Save the order book snapshot to MongoDB.
                     insert_result = self.order_book_snapshot_collection.insert_one(order_book_snapshot.to_dict())
                     order_book_snapshot_id = str(insert_result.inserted_id)
                     logger.info("A new order book snapshot is inserted: %s" % order_book_snapshot_id)
-
-                if prev_digest != order_book_digest:
                     # We publish the updated order book snapshot.
                     self.redis.publish("orderBookSnapshotID", order_book_snapshot_id)
                     logger.info("Published to redis: %s" % order_book_snapshot_id)
 
-                if (0 < len(new_trades)) and (prev_digest != order_book_digest):
-                    # Both order books and trades are updated. This is what we expect to happen normally.
-                    idle_count = 0
-                else:
-                    # Either data has not been updated for LOOP_INTERVAL seconds.
-                    # Is market unusually calm or, which is more likely, ws communication trouble took place?
-                    idle_count += 1
-                    logger.info("Either data is not updated. Count=%d" % idle_count)
-                    if settings.MAX_IDLE_COUNT < idle_count:
-                        logger.error("WS communication trouble? Aborting. IdleCount=%d" % idle_count)
-                        break
+                if settings.MAX_ORDERS_IDLE_COUNT < orders_idle_count:
+                    logger.error("Order book NOT updated. Aborting. IdleCount=%d" % orders_idle_count)
+                    break
+                if settings.MAX_TRADES_IDLE_COUNT < trades_idle_count:
+                    logger.error("Trades NOT updated. Aborting. IdleCount=%d" % trades_idle_count)
+                    break
 
                 # Sleep in the main loop.
                 sleep(settings.LOOP_INTERVAL)
