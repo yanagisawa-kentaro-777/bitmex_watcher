@@ -28,7 +28,7 @@ class SampleSubscriber:
 
     def wait_and_load_market_data(self):
         pubsub = self.redis.pubsub()
-        pubsub.subscribe("orderBookSnapshotID")
+        pubsub.subscribe(settings.REDIS_ORDER_BOOK_SNAPSHOT_ID_CHANNEL_NAME)
         for message in pubsub.listen():
             try:
                 logger.debug("[SUB] Message arrived from Redis: %s" % str(message))

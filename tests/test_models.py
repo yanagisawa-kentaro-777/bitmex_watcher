@@ -9,12 +9,13 @@ class TestOrderBookSnapshot(unittest.TestCase):
         from bitmex_watcher.utils import constants
         from bitmex_watcher.models import OrderBookSnapshot
 
-        bids = [{"price": 99.0, "size": 100}, {"price": 98.0, "size": 200}]
-        asks = [{"price": 101.0, "size": 10}, {"price": 102.0, "size": 50}]
-        depth = OrderBookSnapshot(datetime.now().astimezone(constants.TIMEZONE), bids, asks, 25)
+        bids = [{"price": 100.0, "size": 100}, {"price": 99.5, "size": 200}]
+        asks = [{"price": 100.5, "size": 10}, {"price": 101.0, "size": 50}]
+        depth = OrderBookSnapshot(datetime.now().astimezone(constants.TIMEZONE), bids, asks, 0.0075)
 
-        self.assertEqual(100, depth.mid_price)
-        self.assertEqual(0.9167, depth.depth_bias)
+        self.assertEqual(100.25, depth.mid_price)
+        self.assertEqual(100.5417, depth.price_from_depth)
+        self.assertEqual(0.2917, depth.depth_bias)
         self.assertEqual(0.8333, depth.bids_ratio)
         self.assertEqual(360, depth.total_volume)
 
@@ -29,6 +30,56 @@ class TestOrderBookSnapshot(unittest.TestCase):
         self.assertEqual(depth.digest_string(), depth2.digest_string())
 
         self.assertTrue(0 < len(str(depth)))
+
+    def test_order_books_attributes_calculation2(self):
+
+        from bitmex_watcher.utils import constants
+        from bitmex_watcher.models import OrderBookSnapshot
+
+        bids = [{"price": 99.0, "size": 200}, {"price": 98.5, "size": 10},
+                {"price": 98.0, "size": 250}, {"price": 97.0, "size": 100}]
+        asks = [{"price": 100.5, "size": 150}, {"price": 101.0, "size": 100},
+                {"price": 102.0, "size": 200}, {"price": 102.5, "size": 150}]
+        depth = OrderBookSnapshot(datetime.now().astimezone(constants.TIMEZONE), bids, asks, 0.025)
+
+        self.assertEqual(99.75, depth.mid_price)
+        self.assertEqual(3, len(depth.bids))
+        self.assertEqual(3, len(depth.asks))
+        self.assertEqual(99.8736, depth.price_from_depth)
+        self.assertEqual(0.1236, depth.depth_bias)
+        self.assertEqual(0.5055, depth.bids_ratio)
+        self.assertEqual(910, depth.total_volume)
+
+        d = depth.to_dict()
+        self.assertEqual(depth.mid_price, d["midPrice"])
+        self.assertEqual(depth.depth_bias, d["depthBias"])
+        self.assertEqual(depth.bids_ratio, d["bidsRatio"])
+        self.assertEqual(depth.total_volume, d["totalVolume"])
+
+    def test_order_books_attributes_calculation3(self):
+
+        from bitmex_watcher.utils import constants
+        from bitmex_watcher.models import OrderBookSnapshot
+
+        bids = [{"price": 99.5, "size": 50}, {"price": 99.0, "size": 200}, {"price": 98.5, "size": 10},
+                {"price": 98.0, "size": 250}, {"price": 97.0, "size": 100}]
+        asks = [{"price": 100.5, "size": 150}, {"price": 101.0, "size": 100},
+                {"price": 102.0, "size": 200}, {"price": 102.5, "size": 150}]
+        depth = OrderBookSnapshot(datetime.now().astimezone(constants.TIMEZONE), bids, asks, 0.025)
+
+        self.assertEqual(100.0, depth.mid_price)
+        self.assertEqual(4, len(depth.bids))
+        self.assertEqual(4, len(depth.asks))
+        self.assertEqual(100.0068, depth.price_from_depth)
+        self.assertEqual(0.0068, depth.depth_bias)
+        self.assertEqual(0.4595, depth.bids_ratio)
+        self.assertEqual(1110, depth.total_volume)
+
+        d = depth.to_dict()
+        self.assertEqual(depth.mid_price, d["midPrice"])
+        self.assertEqual(depth.depth_bias, d["depthBias"])
+        self.assertEqual(depth.bids_ratio, d["bidsRatio"])
+        self.assertEqual(depth.total_volume, d["totalVolume"])
 
 
 class TestTrade(unittest.TestCase):

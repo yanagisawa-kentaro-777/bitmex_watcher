@@ -4,8 +4,8 @@ import importlib
 import os
 import sys
 
-from bitmex_watcher.utils.dotdict import dotdict
-import bitmex_watcher._settings_base as base_settings
+from bitmex_watcher.utils.dotdict import DotDict
+import bitmex_watcher.base_settings as base_settings
 
 
 def import_path(fullpath):
@@ -34,4 +34,4 @@ if user_settings:
     settings.update(vars(user_settings))
 
 # Main export
-settings = dotdict(settings)
+settings = DotDict(settings)

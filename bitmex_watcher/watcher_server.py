@@ -34,7 +34,7 @@ class MarketWatcher:
             settings.BASE_URL, settings.SYMBOL,
             api_key=None, api_secret=None,
             use_websocket=True, use_rest=False,
-            subscriptions=["instrument", "orderBookL2_25", "trade"]
+            subscriptions=["instrument", "orderBookL2", "trade"]
         )
 
         # MongoDB client.
@@ -113,7 +113,7 @@ class MarketWatcher:
         def prune(order_books):
             return [{"price": float(each["price"]), "size": int(each["size"])} for each in order_books]
 
-        return OrderBookSnapshot(timestamp, prune(bids), prune(asks), settings.MAX_ORDERS_OF_EACH_SIDE)
+        return OrderBookSnapshot(timestamp, prune(bids), prune(asks), settings.TARGET_ORDER_BOOK_PRICE_RATIO)
 
     @staticmethod
     def launder_trades(trades):
@@ -136,10 +136,6 @@ class MarketWatcher:
     @staticmethod
     def is_healthy(order_book_snapshot):
         if order_book_snapshot.lowest_ask <= order_book_snapshot.highest_bid:
-            return False
-        if settings.MAX_ORDERS_OF_EACH_SIDE < len(order_book_snapshot.bids):
-            return False
-        if settings.MAX_ORDERS_OF_EACH_SIDE < len(order_book_snapshot.asks):
             return False
         return True
 
@@ -166,9 +162,12 @@ class MarketWatcher:
             order_book_digest = ""
             orders_idle_count = 0
             trades_idle_count = 0
+            loop_count = 0
             trades_cursor = self.load_trades_cursor()
             while True:
-                logger.info("LOOP[%s] (%s)" % (self.instance_name, constants.VERSION))
+                loop_start_time = datetime.now().astimezone(constants.TIMEZONE)
+                loop_id = loop_start_time.strftime("%Y%m%d%H%M%S") + "_" + str(loop_count)
+                logger.info("LOOP[%s] (%s)" % (loop_id, constants.VERSION))
                 self.sanity_check()
 
                 # Fetch recent trade data from the market.
@@ -201,7 +200,7 @@ class MarketWatcher:
                 # Fetch order books.
                 timestamp = datetime.now().astimezone(constants.TIMEZONE)
                 order_books = self.bitmex_client.order_books()
-                order_book_snapshot = MarketWatcher.create_order_book_snapshot(timestamp, order_books)
+                order_book_snapshot = self.create_order_book_snapshot(timestamp, order_books)
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("OrderBookSnapshot: %s" % str(order_book_snapshot))
                 if not MarketWatcher.is_healthy(order_book_snapshot):
@@ -221,8 +220,9 @@ class MarketWatcher:
                     order_book_snapshot_id = str(insert_result.inserted_id)
                     logger.info("A new order book snapshot is inserted: %s" % order_book_snapshot_id)
                     # We publish the updated order book snapshot.
-                    self.redis.publish("orderBookSnapshotID", order_book_snapshot_id)
-                    logger.info("Published to redis: %s" % order_book_snapshot_id)
+                    self.redis.publish(settings.REDIS_ORDER_BOOK_SNAPSHOT_ID_CHANNEL_NAME, order_book_snapshot_id)
+                    logger.info("Published to redis [%s]: %s",
+                                settings.REDIS_ORDER_BOOK_SNAPSHOT_ID_CHANNEL_NAME, order_book_snapshot_id)
 
                 if settings.MAX_ORDERS_IDLE_COUNT < orders_idle_count:
                     logger.error("Order book NOT updated. Aborting. IdleCount=%d" % orders_idle_count)
@@ -231,11 +231,19 @@ class MarketWatcher:
                     logger.error("Trades NOT updated. Aborting. IdleCount=%d" % trades_idle_count)
                     break
 
+                loop_end_time = datetime.now().astimezone(constants.TIMEZONE)
+                elapsed_seconds = (loop_end_time - loop_start_time).total_seconds()
+                logger.info("LOOP[%s] ElapsedSeconds: %.2f; OrderBookIdleCount: %d; TradesIdleCount: %d;",
+                            loop_id, elapsed_seconds, orders_idle_count, trades_idle_count)
+
                 # Sleep in the main loop.
                 sleep(settings.LOOP_INTERVAL)
         except Exception as e:
-            logger.error("Error: %s" % str(e))
-            logger.error(sys.exc_info())
+            import traceback
+            traceback.print_exc(file=sys.stdout)
+
+            logger.info("Error: %s" % str(e))
+            logger.info(sys.exc_info())
             raise e
         finally:
             self.exit()

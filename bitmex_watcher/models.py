@@ -1,4 +1,5 @@
 from bitmex_watcher.utils import constants
+import math
 import hashlib
 
 
@@ -13,57 +14,85 @@ def _round_float(v):
 ##
 class OrderBookSnapshot:
 
-    def __init__(self, _timestamp, _bids, _asks, max_orders_of_side):
+    BOARD_PRICE_INTERVAL = 0.5
+
+    def __init__(self, _timestamp, _bids, _asks, accept_price_range_ratio: float):
         self.timestamp = _timestamp
 
-        self.bids = _bids
-        self.asks = _asks
+        self.mid_price = _round_float(float(_bids[0]["price"] + _asks[0]["price"]) / 2)
 
-        num_bids = min(max_orders_of_side, len(self.bids))
-        num_asks = min(max_orders_of_side, len(self.asks))
+        self.bids = self.filter_order_books(self.mid_price, _bids, accept_price_range_ratio)
+        self.asks = self.filter_order_books(self.mid_price, _asks, accept_price_range_ratio)
+
+        self.highest_bid = self.bids[0]["price"]
+        self.lowest_bid = self.bids[-1]["price"]
+        self.lowest_ask = self.asks[0]["price"]
+        self.highest_ask = self.asks[-1]["price"]
+
+        num_bids = len(self.bids)
+        num_asks = len(self.asks)
 
         def get_total_volume(orders, count):
             return sum([int(orders[i]["size"]) for i in range(count)])
-
-        def get_highest_price(orders, count):
-            return max([float(orders[i]["price"]) for i in range(count)])
-
-        def get_lowest_price(orders, count):
-            return min([float(orders[i]["price"]) for i in range(count)])
-
-        self.highest_bid = get_highest_price(self.bids, num_bids)
-        self.lowest_bid = get_lowest_price(self.bids, num_bids)
-        self.lowest_ask = get_lowest_price(self.asks, num_asks)
-        self.highest_ask = get_highest_price(self.asks, num_asks)
-        self.mid_price = _round_float(float(self.highest_bid + self.lowest_ask) / 2)
 
         self.bids_volume = get_total_volume(self.bids, num_bids)
         self.asks_volume = get_total_volume(self.asks, num_asks)
         self.total_volume = self.bids_volume + self.asks_volume
 
-        self.price_from_depth = self.calculate_weighed_average_price_from_orders(num_bids, num_asks, self.mid_price)
+        price_range_for_side = (self.mid_price * accept_price_range_ratio) + (self.BOARD_PRICE_INTERVAL / 2)
+        self.price_from_depth = self.calculate_weighed_average_price_from_orders(
+            self.mid_price - (self.BOARD_PRICE_INTERVAL / 2),
+            self.mid_price + (self.BOARD_PRICE_INTERVAL / 2),
+            int(price_range_for_side / self.BOARD_PRICE_INTERVAL)
+        )
         self.depth_bias = _round_float(self.price_from_depth - self.mid_price)
         if 0 < self.total_volume:
             self.bids_ratio = _round_float(float(self.bids_volume) / self.total_volume)
         else:
             self.bids_ratio = -1
 
-    def calculate_weighed_average_price_from_orders(self, _num_bids, _num_asks, _mid_price):
+    @staticmethod
+    def filter_order_books(std_price, order_books, accept_range_ratio):
+        allowable_price_diff = std_price * accept_range_ratio
+        for i in range(len(order_books)):
+            each_order_book = order_books[i]
+            if allowable_price_diff < math.fabs(each_order_book["price"] - std_price):
+                return order_books[:i]
+        return order_books
+
+    def calculate_weighed_average_price_from_orders(
+            self, logical_highest_bid: float, logical_lowest_ask: float, logical_num_boards_of_side: int
+    ):
         accum = 0.0
         accum_vol = 0
-        end_idx = min(_num_bids, _num_asks)
+        logical_mid_price: float = (logical_highest_bid + logical_lowest_ask) / 2.0
+        end_idx = logical_num_boards_of_side
+
         for i in range(end_idx):
-            # Price is biased high by high and large bids.
-            accum += float(self.asks[end_idx - 1 - i]["price"]) * int(self.bids[i]["size"])
-            # Price is biased low by low and large asks.
-            accum += float(self.bids[end_idx - 1 - i]["price"]) * int(self.asks[i]["size"])
-            # Divisor.
-            accum_vol += int(self.bids[i]["size"])
-            accum_vol += int(self.asks[i]["size"])
+            # If the price of a board (bid or ask) is nearer to the mid price,
+            # then it has larger power to push the price to the opposite (ask or bid) side.
+            each_bid = self.bids[i] if i < len(self.bids) else None
+            if each_bid:
+                # Price is biased high by high and large bids.
+                idx = (logical_mid_price - each_bid['price']) // self.BOARD_PRICE_INTERVAL
+                price_diff_to_reflect = (end_idx - 1 - idx) * self.BOARD_PRICE_INTERVAL
+
+                reflected_price = (logical_mid_price + (self.BOARD_PRICE_INTERVAL / 2.0)) + price_diff_to_reflect
+                accum += reflected_price * int(each_bid["size"])
+                accum_vol += each_bid["size"]
+            each_ask = self.asks[i] if i < len(self.asks) else None
+            if each_ask:
+                # Price is biased low by low and large asks.
+                idx = (each_ask['price'] - logical_mid_price) // self.BOARD_PRICE_INTERVAL
+                price_diff_to_reflect = (end_idx - 1 - idx) * self.BOARD_PRICE_INTERVAL
+
+                reflected_price = (logical_mid_price - (self.BOARD_PRICE_INTERVAL / 2.0)) - price_diff_to_reflect
+                accum += reflected_price * int(each_ask["size"])
+                accum_vol += each_ask["size"]
         if 0 < accum_vol:
             return _round_float(accum / accum_vol)
         else:
-            return _mid_price
+            return logical_mid_price
 
     def __str__(self):
         return str(self._to_summary_dict())

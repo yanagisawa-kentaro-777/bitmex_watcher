@@ -24,6 +24,8 @@ REDIS_HOST = "redis"
 REDIS_PORT = 6379
 REDIS_DB = 0
 
+REDIS_ORDER_BOOK_SNAPSHOT_ID_CHANNEL_NAME = 'from-watcher:order-book-snapshot-id'
+
 ########################################################################################################################
 # Target
 ########################################################################################################################
@@ -36,7 +38,7 @@ SYMBOL = "XBTUSD"
 ########################################################################################################################
 
 # Subscribing "orderBookL2_25" would be sufficient.
-MAX_ORDERS_OF_EACH_SIDE = 25
+TARGET_ORDER_BOOK_PRICE_RATIO = 0.005
 
 ENABLE_SAMPLE_SUBSCRIBER = False
 
