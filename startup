@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-from bitmex_watcher import server, sample_subscriber
+from bitmex_watcher import watcher_server, sample_subscriber
 from bitmex_watcher.settings import settings
 
 if settings.ENABLE_SAMPLE_SUBSCRIBER:
     sample_subscriber.start()
 # Start watcher server.
-server.start()
+watcher_server.start()

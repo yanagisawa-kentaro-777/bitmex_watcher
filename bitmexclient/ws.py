@@ -9,7 +9,7 @@ import urllib
 
 import websocket
 
-from bitmexclient.signature import generate_nonce, generate_signature
+from bitmexclient.auth import expiration_time, generate_signature
 
 
 # Naive implementation of connecting to BitMEX websocket for streaming real time data.
@@ -25,13 +25,15 @@ class BitMEXWebSocketClient:
     # Don't grow a table larger than this amount. Helps cap memory usage.
     MAX_TABLE_LEN = 200
 
-    def __init__(self, endpoint, symbol, api_key=None, api_secret=None, subscriptions=None):
+    def __init__(self, endpoint, symbol, api_key=None, api_secret=None, subscriptions=None, expiration_seconds=3600):
         '''Connect to the websocket and initialize data stores.'''
         self.logger = logging.getLogger(__name__)
         self.logger.debug("Initializing WebSocket.")
 
         self.endpoint = endpoint
         self.symbol = symbol
+
+        self.expiration_seconds = expiration_seconds
 
         if api_key is not None and api_secret is None:
             raise ValueError('api_secret is required if api_key is provided')
@@ -47,20 +49,26 @@ class BitMEXWebSocketClient:
             self.subscription_list =\
                 ["execution", "instrument", "margin", "order", "orderBookL2", "position", "quote", "trade"]
 
+        self.updates = {}
         self.data = {}
         self.keys = {}
         self.exited = False
 
         # We can subscribe right in the connection querystring, so let's build that.
         # Subscribe to all pertinent endpoints
-        wsURL = self.__get_url()
-        self.logger.info("Connecting to %s" % wsURL)
-        self.__connect(wsURL, symbol)
+        ws_uri = self.__get_url()
+        self.logger.info("Connecting to %s" % ws_uri)
+        self.__connect(ws_uri, symbol)
         self.logger.info('Connected to WS.')
 
         # Connected. Wait for partials
         self.__wait_for_data_arrival(symbol)
         self.logger.info('Got all market data. Starting.')
+
+    @staticmethod
+    def _now():
+        from datetime import datetime, timezone
+        return datetime.now().astimezone(timezone.utc)
 
     def exit(self):
         '''Call this to exit - will close websocket.'''
@@ -76,13 +84,13 @@ class BitMEXWebSocketClient:
 
     def get_ticker(self):
         '''Return a ticker object. Generated from quote and trade.'''
-        lastQuote = self.data['quote'][-1]
-        lastTrade = self.data['trade'][-1]
+        last_quote = self.data['quote'][-1]
+        last_trade = self.data['trade'][-1]
         ticker = {
-            "last": lastTrade['price'],
-            "buy": lastQuote['bidPrice'],
-            "sell": lastQuote['askPrice'],
-            "mid": (float(lastQuote['bidPrice'] or 0) + float(lastQuote['askPrice'] or 0)) / 2
+            "last": last_trade['price'],
+            "buy": last_quote['bidPrice'],
+            "sell": last_quote['askPrice'],
+            "mid": (float(last_quote['bidPrice'] or 0) + float(last_quote['askPrice'] or 0)) / 2
         }
 
         # The instrument has a tickSize. Use it to round values.
@@ -103,14 +111,18 @@ class BitMEXWebSocketClient:
     def executions(self):
         return self.data['execution']
 
+    def get_order_book_table_name(self):
+        if 'orderBookL2' in self.data:
+            return 'orderBookL2'
+        elif 'orderBookL2_25' in self.data:
+            return 'orderBookL2_25'
+        else:
+            return 'orderBook10'
+
     def market_depth(self):
         '''Get market depth (orderbook). Returns all levels.'''
-        if 'orderBookL2' in self.data:
-            return self.data['orderBookL2']
-        elif 'orderBookL2_25' in self.data:
-            return self.data['orderBookL2_25']
-        else:
-            return self.data['orderBook10']
+        table_name = self.get_order_book_table_name()
+        return self.data[table_name]
 
     def open_orders(self, clOrdIDPrefix):
         '''Get all your open orders.'''
@@ -158,7 +170,7 @@ class BitMEXWebSocketClient:
             self.logger.info("Authenticating with API Key.")
             # To auth to the WS using an API key, we generate a signature of a nonce and
             # the WS API endpoint.
-            expires = generate_nonce()
+            expires = expiration_time(self.expiration_seconds)
             return [
                 "api-expires: " + str(expires),
                 "api-signature: " + generate_signature(self.api_secret, 'GET', '/realtime', expires, ''),
@@ -177,21 +189,21 @@ class BitMEXWebSocketClient:
         '''
 
         # You can sub to orderBookL2 for all levels, or orderBook10 for top 10 levels & save bandwidth
-        symbolSubs = copy.copy(self.subscription_list)
-        if "margin" in symbolSubs:
-            symbolSubs.remove("margin")
-            genericSubs = ["margin"]
+        subscriptions_per_symbol = copy.copy(self.subscription_list)
+        if "margin" in subscriptions_per_symbol:
+            subscriptions_per_symbol.remove("margin")
+            generic_subscriptions = ["margin"]
         else:
-            genericSubs = []
+            generic_subscriptions = []
 
-        subscriptions = [sub + ':' + self.symbol for sub in symbolSubs]
-        subscriptions += genericSubs
+        subscriptions = [sub + ':' + self.symbol for sub in subscriptions_per_symbol]
+        subscriptions += generic_subscriptions
 
-        urlParts = list(urllib.parse.urlparse(self.endpoint))
-        urlParts[0] = urlParts[0].replace('http', 'ws')
-        urlParts[2] = "/realtime?subscribe={}".format(','.join(subscriptions))
+        uri_parts = list(urllib.parse.urlparse(self.endpoint))
+        uri_parts[0] = uri_parts[0].replace('http', 'ws')
+        uri_parts[2] = "/realtime?subscribe={}".format(','.join(subscriptions))
 
-        return urllib.parse.urlunparse(urlParts)
+        return urllib.parse.urlunparse(uri_parts)
 
     def __wait_for_data_arrival(self, symbol):
         '''On subscribe, this data will come down. Wait for it.'''
@@ -212,6 +224,9 @@ class BitMEXWebSocketClient:
 
         table = message.get('table')
         action = message.get('action')
+        # Remember the time of update.
+        if table is not None and 0 < len(table):
+            self.updates[table] = self._now()
         try:
             if 'subscribe' in message:
                 self.logger.debug("Subscribed to %s." % message['subscribe'])
