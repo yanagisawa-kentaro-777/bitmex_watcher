@@ -1,4 +1,4 @@
-class dotdict(dict):
+class DotDict(dict):
     """dot.notation access to dictionary attributes"""
     def __getattr__(self, attr):
         return self.get(attr)
