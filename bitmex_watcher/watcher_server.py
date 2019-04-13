@@ -6,14 +6,13 @@ import signal
 
 from time import sleep
 from datetime import datetime
-from dateutil import parser
 
 import logging
 
 import pymongo
 import redis
 
-from bitmexclient import BitMEXClient
+from pybitmex import *
 
 from bitmex_watcher.models import *
 from bitmex_watcher.settings import settings
@@ -81,8 +80,16 @@ class MarketWatcher:
     def sanity_check(self):
         # Ensure market is open.
         if not self.bitmex_client.is_market_in_normal_state():
-            logger.error("Market is NOT in normal state: %s" % self.bitmex_client.get_instrument()["state"])
+            logger.error("Market is NOT in normal state: %s" % self.bitmex_client.ws_market_state())
             raise errors.MarketClosedError()
+
+    def is_ws_idle(self, table_name, max_idle_count):
+        last_update = self.bitmex_client.get_last_ws_update(table_name)
+        if last_update is None:
+            return True
+        elapsed_seconds = (datetime.now() - last_update).total_seconds()
+        logger.warning("WS elapsed seconds: %d", elapsed_seconds)
+        return ((max_idle_count / 2.0) * settings.LOOP_INTERVAL) < elapsed_seconds
 
     def exit(self, p1=None, p2=None, p3=None):
         if not self.is_running:
@@ -106,20 +113,8 @@ class MarketWatcher:
         sys.exit()
 
     @staticmethod
-    def create_order_book_snapshot(timestamp, depth):
-        bids = sorted([b for b in depth if b["side"] == "Buy"], key=lambda b: b["price"], reverse=True)
-        asks = sorted([b for b in depth if b["side"] == "Sell"], key=lambda b: b["price"], reverse=False)
-
-        def prune(order_books):
-            return [{"price": float(each["price"]), "size": int(each["size"])} for each in order_books]
-
-        return OrderBookSnapshot(timestamp, prune(bids), prune(asks), settings.TARGET_ORDER_BOOK_PRICE_RATIO)
-
-    @staticmethod
-    def launder_trades(trades):
-        result = [Trade(t["trdMatchID"], parser.parse(t["timestamp"]).astimezone(constants.TIMEZONE),
-                        t["side"], float(t["price"]), int(t["size"])) for t in trades]
-        return sorted([t for t in result], key=lambda t: (t.timestamp, t.trd_match_id), reverse=False)
+    def create_order_book_snapshot(timestamp, bids, asks):
+        return OrderBookSnapshot(timestamp, bids, asks, settings.TARGET_ORDER_BOOK_PRICE_RATIO)
 
     @staticmethod
     def filter_new_trades(cursor, all_trades):
@@ -167,12 +162,14 @@ class MarketWatcher:
             while True:
                 loop_start_time = datetime.now().astimezone(constants.TIMEZONE)
                 loop_id = loop_start_time.strftime("%Y%m%d%H%M%S") + "_" + str(loop_count)
-                logger.info("LOOP[%s] (%s)" % (loop_id, constants.VERSION))
+                logger.info("LOOP_HEAD[%s](%s)" % (loop_id, constants.VERSION))
                 self.sanity_check()
+                if self.bitmex_client.ws_market_state() == "Closed":
+                    logger.info("The market is closed. Waiting for a while.")
+                    sleep(1.0)
 
                 # Fetch recent trade data from the market.
-                raw_trades = self.bitmex_client.recent_trades()
-                trades = MarketWatcher.launder_trades(raw_trades)
+                trades = self.bitmex_client.ws_sorted_recent_trade_objects_of_market()
                 if 0 < len(trades):
                     logger.info("%d trades are fetched [%s - %s].",
                                 len(trades),
@@ -199,8 +196,8 @@ class MarketWatcher:
 
                 # Fetch order books.
                 timestamp = datetime.now().astimezone(constants.TIMEZONE)
-                order_books = self.bitmex_client.order_books()
-                order_book_snapshot = self.create_order_book_snapshot(timestamp, order_books)
+                bids, asks = self.bitmex_client.ws_sorted_bids_and_asks_of_market()
+                order_book_snapshot = self.create_order_book_snapshot(timestamp, bids, asks)
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("OrderBookSnapshot: %s" % str(order_book_snapshot))
                 if not MarketWatcher.is_healthy(order_book_snapshot):
@@ -213,6 +210,7 @@ class MarketWatcher:
                 if prev_digest == order_book_digest:
                     orders_idle_count += 1
                     logger.info("Order book digest has NOT changed.")
+                    self.redis.publish(settings.REDIS_ORDER_BOOK_SNAPSHOT_ID_CHANNEL_NAME, '*')
                 else:
                     orders_idle_count = 0
                     # Save the order book snapshot to MongoDB.
@@ -228,12 +226,13 @@ class MarketWatcher:
                     logger.error("Order book NOT updated. Aborting. IdleCount=%d" % orders_idle_count)
                     break
                 if settings.MAX_TRADES_IDLE_COUNT < trades_idle_count:
-                    logger.error("Trades NOT updated. Aborting. IdleCount=%d" % trades_idle_count)
+                    logger.error("Trades NOT updated. Aborting. IdleCount=%d; WS Idle: %s",
+                                 trades_idle_count, self.is_ws_idle('trade', settings.MAX_TRADES_IDLE_COUNT))
                     break
 
                 loop_end_time = datetime.now().astimezone(constants.TIMEZONE)
                 elapsed_seconds = (loop_end_time - loop_start_time).total_seconds()
-                logger.info("LOOP[%s] ElapsedSeconds: %.2f; OrderBookIdleCount: %d; TradesIdleCount: %d;",
+                logger.info("LOOP[%s] (SUMMARY) ElapsedSeconds: %.2f; OrderBookIdleCount: %d; TradesIdleCount: %d;",
                             loop_id, elapsed_seconds, orders_idle_count, trades_idle_count)
 
                 # Sleep in the main loop.
