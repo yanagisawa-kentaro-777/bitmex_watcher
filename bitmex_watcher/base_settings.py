@@ -1,4 +1,5 @@
 import logging
+import os
 
 ########################################################################################################################
 # Connection/Auth
@@ -7,6 +8,8 @@ import logging
 # API URL.
 # BASE_URL = "https://testnet.bitmex.com/api/v1/"
 BASE_URL = "https://www.bitmex.com/api/v1/"
+
+MARKET_ORDER_BOOK_DATA_NAME = os.environ['MARKET_ORDER_BOOK_DATA_NAME']
 
 INSTANCE_NAME = "WATCHER_NODE"
 
