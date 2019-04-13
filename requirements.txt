@@ -1,8 +1,4 @@
-future>=0.17.1
-python-dateutil>=2.8.0
-
-websocket-client>=0.55.0
-requests>=2.21.0
+pybitmex>=0.5.0
 
 pymongo>=3.7.2
 redis>=3.2.0
