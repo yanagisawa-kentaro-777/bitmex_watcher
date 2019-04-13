@@ -28,12 +28,13 @@ class MarketWatcher:
         self.instance_name = settings.INSTANCE_NAME
 
         # Client to the BitMex exchange.
-        logger.info("Connecting to BitMEX exchange: %s %s" % (settings.BASE_URL, settings.SYMBOL))
+        logger.info("Connecting to BitMEX exchange: %s %s %s",
+                    settings.BASE_URL, settings.SYMBOL, settings.MARKET_ORDER_BOOK_DATA_NAME)
         self.bitmex_client = BitMEXClient(
             settings.BASE_URL, settings.SYMBOL,
             api_key=None, api_secret=None,
             use_websocket=True, use_rest=False,
-            subscriptions=["instrument", "orderBookL2", "trade"]
+            subscriptions=["instrument", settings.MARKET_ORDER_BOOK_DATA_NAME, "trade"]
         )
 
         # MongoDB client.
