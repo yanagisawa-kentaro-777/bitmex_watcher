@@ -45,7 +45,9 @@ class SampleSubscriber:
                 if loaded_snapshot is None:
                     logger.info("[SUB] Cannot load snapshot for %s" % order_book_snapshot_id)
                     continue
-                logger.info("[SUB] Loaded from MongoDB: %s", str(loaded_snapshot))
+                # logger.info("[SUB] Loaded from MongoDB: %s", str(loaded_snapshot))
+                logger.info("[SUB] Loaded from MongoDB: %d bids and %d asks",
+                            len(loaded_snapshot['bids']), len(loaded_snapshot['asks']))
 
                 std_datetime = datetime.now().astimezone(constants.TIMEZONE) - timedelta(minutes=30)
                 logger.info("[SUB] StdDateTime: %s", std_datetime.strftime(constants.DATE_FORMAT))
@@ -57,8 +59,6 @@ class SampleSubscriber:
                     {'$group':
                          {'_id': 'null',
                           'total_volume': {'$sum': '$size'},
-                          'bought_volume': {'$sum': '$boughtSize'},
-                          'sold_volume': {'$sum': '$soldSize'},
                           'market_momentum': {'$sum': '$momentum'},
                           'average_price': {'$avg': '$price'},
                           'sd_of_price': {'$stdDevPop': '$price'},
@@ -70,8 +70,8 @@ class SampleSubscriber:
                 rows = self.trades_collection.aggregate(pipeline=trades_pipeline)
                 for row in rows:
                     logger.info(
-                        "[SUB] %d trade vol. MarketMomentum: %d (%d - %d). Avg price: %.2f, SD: %.2f, [%.1f - %.1f]",
-                        row['total_volume'], row['market_momentum'], row['bought_volume'], row['sold_volume'],
+                        "[SUB] %d trade vol. MarketMomentum: %d. Avg price: %.2f, SD: %.2f, [%.1f - %.1f]",
+                        row['total_volume'], row['market_momentum'],
                         row['average_price'], row['sd_of_price'], row['min_price'], row['max_price'])
             except Exception as e:
                 logger.error(e)

@@ -128,39 +128,6 @@ class OrderBookSnapshot:
         return hashlib.sha256(document.encode('utf-8')).hexdigest()
 
 
-class Trade:
-
-    def __init__(self, _trd_match_id, _timestamp, _side, _price, _size):
-        self.trd_match_id = _trd_match_id
-        self.timestamp = _timestamp
-        self.side = _side
-        self.price = _price
-        self.size = _size
-        # Redundant fields for the convenience of aggregation.
-        if self.side == "Buy":
-            self.bought_size = self.size
-            self.sold_size = 0
-        else:
-            self.sold_size = self.size
-            self.bought_size = 0
-        self.momentum = self.bought_size - self.sold_size
-
-    def __str__(self):
-        return str(self.to_dict())
-
-    def to_dict(self):
-        return {
-            'trdMatchID': self.trd_match_id,
-            'timestamp': self.timestamp,
-            'side': self.side,
-            'price': self.price,
-            'size': self.size,
-            "boughtSize": self.bought_size,
-            "soldSize": self.sold_size,
-            "momentum": self.momentum
-        }
-
-
 class TradesCursor:
 
     def __init__(self, _timestamp, _trd_match_id):
