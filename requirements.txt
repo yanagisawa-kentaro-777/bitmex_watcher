@@ -1,4 +1,4 @@
-pybitmex>=0.5.2
+pybitmex>=0.5.4
 
 pymongo>=3.7.2
 redis>=3.2.0
