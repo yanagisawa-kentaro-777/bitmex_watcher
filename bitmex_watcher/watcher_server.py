@@ -155,6 +155,13 @@ class MarketWatcher:
         if logger.isEnabledFor(logging.ERROR):
             logger.debug("Trades cursor is saved: %s", str(cursor))
 
+    def _wait_while_market_is_closed(self):
+        count = 0
+        while (self.bitmex_client.ws_market_state() == "Closed") and (count < settings.MARKET_WAIT_SECONDS):
+            logger.info("The market is closed. Waiting for a while.")
+            count += 1
+            sleep(1.0)
+
     def run_loop(self):
         try:
             order_book_digest = ""
@@ -166,10 +173,9 @@ class MarketWatcher:
                 loop_start_time = datetime.now().astimezone(constants.TIMEZONE)
                 loop_id = loop_start_time.strftime("%Y%m%d%H%M%S") + "_" + str(loop_count)
                 logger.info("LOOP_HEAD[%s](%s)" % (loop_id, constants.VERSION))
+
+                self._wait_while_market_is_closed()
                 self.sanity_check()
-                if self.bitmex_client.ws_market_state() == "Closed":
-                    logger.info("The market is closed. Waiting for a while.")
-                    sleep(1.0)
 
                 # Fetch recent trade data from the market.
                 trades = self.bitmex_client.ws_sorted_recent_trade_objects_of_market()
