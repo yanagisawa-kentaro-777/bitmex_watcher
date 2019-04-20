@@ -4,6 +4,8 @@ import sys
 import atexit
 import signal
 
+from concurrent.futures import ThreadPoolExecutor
+
 from time import sleep
 from datetime import datetime
 
@@ -23,6 +25,10 @@ from bitmex_watcher.utils import log, constants, errors
 logger = log.setup_custom_logger('root')
 
 
+def now():
+    return datetime.now().astimezone(constants.TIMEZONE)
+
+
 class MarketWatcher:
 
     def __init__(self):
@@ -31,12 +37,12 @@ class MarketWatcher:
         # Client to the BitMex exchange.
         logger.info("Connecting to BitMEX exchange: %s %s %s",
                     settings.BASE_URL, settings.SYMBOL, settings.MARKET_ORDER_BOOK_DATA_NAME)
-        self.bitmex_client = BitMEXClient(
-            settings.BASE_URL, settings.SYMBOL,
-            api_key=None, api_secret=None,
-            use_websocket=True, use_rest=False,
-            subscriptions=["instrument", settings.MARKET_ORDER_BOOK_DATA_NAME, "trade"]
-        )
+        self.bitmex_client = self._create_bitmex_client()
+        self.bitmex_client_refreshed_time = now()
+        self.is_refreshing = False
+
+        # Executor.
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ws_refresh")
 
         # MongoDB client.
         logger.info("Connecting to %s" % settings.MONGO_DB_URI)
@@ -88,6 +94,24 @@ class MarketWatcher:
             logger.error("Market is NOT in normal state: %s" % self.bitmex_client.ws_market_state())
             raise errors.MarketClosedError()
 
+    @staticmethod
+    def _create_bitmex_client():
+        return BitMEXClient(
+            settings.BASE_URL, settings.SYMBOL,
+            api_key=None, api_secret=None,
+            use_websocket=True, use_rest=False,
+            subscriptions=["instrument", settings.MARKET_ORDER_BOOK_DATA_NAME, "trade"]
+        )
+
+    def _refresh_bitmex_client(self):
+        self.bitmex_client_refreshed_time = now()
+        logger.info("Now refreshing BitMEXClient.")
+        self.is_refreshing = True
+        self.bitmex_client.close()
+        self.bitmex_client = self._create_bitmex_client()
+        self.is_refreshing = False
+        logger.info("Refreshed BitMEXClient.")
+
     def is_ws_idle(self, table_name, max_idle_count):
         last_update = self.bitmex_client.get_last_ws_update(table_name)
         if last_update is None:
@@ -117,6 +141,8 @@ class MarketWatcher:
             self.graphite.close()
         except Exception as e:
             logger.info("Unable to close Graphite client: %s" % e)
+
+        self.executor.shutdown(wait=False)
 
         # Now the clients are all down.
         self.is_running = False
@@ -164,6 +190,12 @@ class MarketWatcher:
         if logger.isEnabledFor(logging.ERROR):
             logger.debug("Trades cursor is saved: %s", str(cursor))
 
+    def _wait_while_refreshing(self):
+        count = 0
+        while self.is_refreshing and count < (settings.REFRESH_WAIT_SECONDS * 10):
+            count += 1
+            sleep(0.1)
+
     def _wait_while_market_is_closed(self):
         closed = False
         count = 0
@@ -182,9 +214,11 @@ class MarketWatcher:
             loop_count = 0
             trades_cursor = self.load_trades_cursor()
             while True:
-                loop_start_time = datetime.now().astimezone(constants.TIMEZONE)
+                loop_start_time = now()
                 loop_id = loop_start_time.strftime("%Y%m%d%H%M%S") + "_" + str(loop_count)
                 logger.info("LOOP_HEAD[%s](%s)" % (loop_id, constants.VERSION))
+
+                self._wait_while_refreshing()
 
                 graphite_logs = []
                 closed = self._wait_while_market_is_closed()
@@ -268,6 +302,10 @@ class MarketWatcher:
                     ("system.market-watcher.idle-count.trades", trades_idle_count)
                 ]
                 self.graphite.batch_send(graphite_logs)
+
+                # Refresh bitmex client.
+                if settings.WS_REFRESH_INTERVAL < (now() - self.bitmex_client_refreshed_time).total_seconds():
+                    self.executor.submit(self._refresh_bitmex_client)
 
                 # Sleep in the main loop.
                 sleep(settings.LOOP_INTERVAL)
