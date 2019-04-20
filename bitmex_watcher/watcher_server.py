@@ -13,6 +13,7 @@ import pymongo
 import redis
 
 from pybitmex import *
+from graphitepusher import GraphiteClient
 
 from bitmex_watcher.models import *
 from bitmex_watcher.settings import settings
@@ -50,6 +51,9 @@ class MarketWatcher:
 
         # Redis client.
         self.redis = redis.StrictRedis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB)
+
+        # Graphite client.
+        self.graphite = GraphiteClient(settings.GRAPHITE_HOST, settings.GRAPHITE_PORT)
 
         # Now the clients are all up.
         self.is_running = True
@@ -108,6 +112,11 @@ class MarketWatcher:
             self.bitmex_client.close()
         except Exception as e:
             logger.info("Unable to close Bitmex client: %s" % e)
+
+        try:
+            self.graphite.close()
+        except Exception as e:
+            logger.info("Unable to close Graphite client: %s" % e)
 
         # Now the clients are all down.
         self.is_running = False
@@ -177,6 +186,8 @@ class MarketWatcher:
                 self._wait_while_market_is_closed()
                 self.sanity_check()
 
+                graphite_logs = []
+
                 # Fetch recent trade data from the market.
                 trades = self.bitmex_client.ws_sorted_recent_trade_objects_of_market()
                 if 0 < len(trades):
@@ -199,6 +210,11 @@ class MarketWatcher:
                     logger.info("%d trades inserted. The last: %s",
                                 len(insert_result.inserted_ids), str(trades_cursor))
                     self.save_trades_cursor(trades_cursor)
+
+                    momentum_sum = sum(t.momentum for t in new_trades)
+                    volume_sum = sum(t.size for t in new_trades)
+                    graphite_logs.append(("market.momentum", momentum_sum))
+                    graphite_logs.append(("market.volume", volume_sum))
                 else:
                     trades_idle_count += 1
                     logger.info("NO new trades.")
@@ -243,6 +259,14 @@ class MarketWatcher:
                 elapsed_seconds = (loop_end_time - loop_start_time).total_seconds()
                 logger.info("LOOP[%s] (SUMMARY) ElapsedSeconds: %.2f; OrderBookIdleCount: %d; TradesIdleCount: %d;",
                             loop_id, elapsed_seconds, orders_idle_count, trades_idle_count)
+
+                graphite_logs += [
+                    ("market.mid_price", order_book_snapshot.mid_price),
+                    ("system.market-watcher.loop-time", elapsed_seconds),
+                    ("system.market-watcher.idle-count.order-books", orders_idle_count),
+                    ("system.market-watcher.idle-count.trades", trades_idle_count)
+                ]
+                self.graphite.batch_send(graphite_logs)
 
                 # Sleep in the main loop.
                 sleep(settings.LOOP_INTERVAL)
