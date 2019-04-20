@@ -165,11 +165,14 @@ class MarketWatcher:
             logger.debug("Trades cursor is saved: %s", str(cursor))
 
     def _wait_while_market_is_closed(self):
+        closed = False
         count = 0
         while (self.bitmex_client.ws_market_state() == "Closed") and (count < settings.MARKET_WAIT_SECONDS):
             logger.info("The market is closed. Waiting for a while.")
+            closed = True
             count += 1
             sleep(1.0)
+        return closed
 
     def run_loop(self):
         try:
@@ -183,10 +186,10 @@ class MarketWatcher:
                 loop_id = loop_start_time.strftime("%Y%m%d%H%M%S") + "_" + str(loop_count)
                 logger.info("LOOP_HEAD[%s](%s)" % (loop_id, constants.VERSION))
 
-                self._wait_while_market_is_closed()
-                self.sanity_check()
-
                 graphite_logs = []
+                closed = self._wait_while_market_is_closed()
+                graphite_logs.append(("market.state.closed", 1 if closed else 0))
+                self.sanity_check()
 
                 # Fetch recent trade data from the market.
                 trades = self.bitmex_client.ws_sorted_recent_trade_objects_of_market()
@@ -211,10 +214,8 @@ class MarketWatcher:
                                 len(insert_result.inserted_ids), str(trades_cursor))
                     self.save_trades_cursor(trades_cursor)
 
-                    momentum_sum = sum(t.momentum for t in new_trades)
-                    volume_sum = sum(t.size for t in new_trades)
-                    graphite_logs.append(("market.momentum", momentum_sum))
-                    graphite_logs.append(("market.volume", volume_sum))
+                    graphite_logs.append(("market.momentum", sum(t.momentum for t in new_trades)))
+                    graphite_logs.append(("market.volume", sum(t.size for t in new_trades)))
                 else:
                     trades_idle_count += 1
                     logger.info("NO new trades.")
