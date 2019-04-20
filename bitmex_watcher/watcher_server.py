@@ -95,6 +95,8 @@ class MarketWatcher:
     def exit(self, p1=None, p2=None, p3=None):
         if not self.is_running:
             return
+        if p1 and p2 and p3:
+            logger.debug("")
 
         logger.info('SHUTTING DOWN BitMEX Watcher. Version %s' % constants.VERSION)
 
