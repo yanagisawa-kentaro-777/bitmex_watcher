@@ -19,7 +19,7 @@ from graphitepusher import GraphiteClient
 
 from bitmex_watcher.models import *
 from bitmex_watcher.settings import settings
-from bitmex_watcher.utils import log, constants, errors
+from bitmex_watcher.utils import log, constants
 
 
 logger = log.setup_custom_logger('root')
@@ -27,6 +27,10 @@ logger = log.setup_custom_logger('root')
 
 def now():
     return datetime.now().astimezone(constants.TIMEZONE)
+
+
+class MarketStateError(Exception):
+    pass
 
 
 class MarketWatcher:
@@ -92,7 +96,7 @@ class MarketWatcher:
         # Ensure market is open.
         if not self.bitmex_client.is_market_in_normal_state():
             logger.error("Market is NOT in normal state: %s" % self.bitmex_client.ws_market_state())
-            raise errors.MarketClosedError()
+            raise MarketStateError()
 
     @staticmethod
     def _create_bitmex_client():
@@ -270,17 +274,25 @@ class MarketWatcher:
                 if prev_digest == order_book_digest:
                     orders_idle_count += 1
                     logger.info("Order book digest has NOT changed.")
-                    self.redis.publish(settings.REDIS_ORDER_BOOK_SNAPSHOT_ID_CHANNEL_NAME, '*')
+                    if settings.SHOULD_PUBLISH_TO_CHANNEL:
+                        # Publish that there is no update.
+                        self.redis.publish(settings.REDIS_ORDER_BOOK_SNAPSHOT_ID_CHANNEL_NAME, '*')
+                    # The latest key is already written in redis. No need to "set" the value.
                 else:
                     orders_idle_count = 0
                     # Save the order book snapshot to MongoDB.
                     insert_result = self.order_book_snapshot_collection.insert_one(order_book_snapshot.to_dict())
                     order_book_snapshot_id = str(insert_result.inserted_id)
                     logger.info("A new order book snapshot is inserted: %s" % order_book_snapshot_id)
-                    # We publish the updated order book snapshot.
-                    self.redis.publish(settings.REDIS_ORDER_BOOK_SNAPSHOT_ID_CHANNEL_NAME, order_book_snapshot_id)
-                    logger.info("Published to redis [%s]: %s",
-                                settings.REDIS_ORDER_BOOK_SNAPSHOT_ID_CHANNEL_NAME, order_book_snapshot_id)
+                    if settings.SHOULD_PUBLISH_TO_CHANNEL:
+                        # We publish the updated order book snapshot.
+                        self.redis.publish(settings.REDIS_ORDER_BOOK_SNAPSHOT_ID_CHANNEL_NAME, order_book_snapshot_id)
+                        logger.info("Published to redis [%s]: %s",
+                                    settings.REDIS_ORDER_BOOK_SNAPSHOT_ID_CHANNEL_NAME, order_book_snapshot_id)
+                    # Write the latest id to redis.
+                    self.redis.set(settings.REDIS_ORDER_BOOK_SNAPSHOT_ID_KEY_NAME, order_book_snapshot_id)
+                    logger.info("Set to redis [%s]: %s",
+                                settings.REDIS_ORDER_BOOK_SNAPSHOT_ID_KEY_NAME, order_book_snapshot_id)
 
                 if settings.MAX_ORDERS_IDLE_COUNT < orders_idle_count:
                     logger.error("Order book NOT updated. Aborting. IdleCount=%d" % orders_idle_count)
@@ -321,7 +333,7 @@ class MarketWatcher:
 
 
 def start():
-    logger.info('STARTING BitMEX Watcher. Version %s' % constants.VERSION)
+    logger.info('STARTING BitMEX Market Watcher. Version %s' % constants.VERSION)
     # Try/except just keeps ctrl-c from printing an ugly stacktrace
     try:
         watcher = MarketWatcher()

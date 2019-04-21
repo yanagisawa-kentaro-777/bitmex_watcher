@@ -6,7 +6,6 @@ import os
 ########################################################################################################################
 
 # API URL.
-# BASE_URL = "https://testnet.bitmex.com/api/v1/"
 BASE_URL = "https://www.bitmex.com/api/v1/"
 
 MARKET_ORDER_BOOK_DATA_NAME = os.environ['MARKET_ORDER_BOOK_DATA_NAME']
@@ -28,6 +27,8 @@ REDIS_PORT = 6379
 REDIS_DB = 0
 
 REDIS_ORDER_BOOK_SNAPSHOT_ID_CHANNEL_NAME = 'from-watcher:order-book-snapshot-id'
+REDIS_ORDER_BOOK_SNAPSHOT_ID_KEY_NAME = 'from-watcher:latest-order-book-snapshot-id'
+SHOULD_PUBLISH_TO_CHANNEL = False
 
 GRAPHITE_HOST = "graphite"
 GRAPHITE_PORT = 2004
@@ -44,12 +45,11 @@ SYMBOL = "XBTUSD"
 # Misc Behavior, Technicals
 ########################################################################################################################
 
-# Subscribing "orderBookL2_25" would be sufficient.
 TARGET_ORDER_BOOK_PRICE_RATIO = 0.005
 
 ENABLE_SAMPLE_SUBSCRIBER = False
 
-LOOP_INTERVAL = 1.5
+LOOP_INTERVAL = int(os.environ['LOOP_INTERVAL'])
 MARKET_WAIT_SECONDS = 25
 MAX_ORDERS_IDLE_COUNT = 5
 MAX_TRADES_IDLE_COUNT = 25
