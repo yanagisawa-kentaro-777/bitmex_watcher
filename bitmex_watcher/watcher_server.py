@@ -122,7 +122,7 @@ class MarketWatcher:
             return True
         elapsed_seconds = (datetime.now() - last_update).total_seconds()
         logger.warning("WS elapsed seconds: %d", elapsed_seconds)
-        return ((max_idle_count / 2.0) * settings.LOOP_INTERVAL) < elapsed_seconds
+        return ((max_idle_count / 2.0) * settings.LOOP_INTERVAL_SECONDS) < elapsed_seconds
 
     def exit(self, p1=None, p2=None, p3=None):
         if not self.is_running:
@@ -320,7 +320,7 @@ class MarketWatcher:
                     self.executor.submit(self._refresh_bitmex_client)
 
                 # Sleep in the main loop.
-                sleep(settings.LOOP_INTERVAL)
+                sleep(settings.LOOP_INTERVAL_SECONDS)
         except Exception as e:
             import traceback
             traceback.print_exc(file=sys.stdout)
