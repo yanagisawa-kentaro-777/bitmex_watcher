@@ -316,7 +316,7 @@ class MarketWatcher:
                 self.graphite.batch_send(graphite_logs)
 
                 # Refresh bitmex client.
-                if settings.WS_REFRESH_INTERVAL < (now() - self.bitmex_client_refreshed_time).total_seconds():
+                if settings.WS_REFRESH_INTERVAL_SECONDS < (now() - self.bitmex_client_refreshed_time).total_seconds():
                     self.executor.submit(self._refresh_bitmex_client)
 
                 # Sleep in the main loop.
