@@ -1,4 +1,4 @@
-pybitmex>=0.5.7
+pybitmex>=0.5.8
 graphitepusher>=0.5.0
 
 pymongo>=3.7.2
