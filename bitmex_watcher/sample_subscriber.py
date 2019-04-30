@@ -18,10 +18,10 @@ class SampleSubscriber:
     def __init__(self):
         # MongoDB client.
         self.mongo_client = pymongo.MongoClient(settings.MONGO_DB_URI)
-        self.bitmex_db = self.mongo_client[settings.BITMEX_DB]
+        self.market_db = self.mongo_client[settings.MARKET_DB]
         # Collections to save data in.
-        self.trades_collection = self.bitmex_db[settings.TRADES_COLLECTION]
-        self.order_book_snapshot_collection = self.bitmex_db[settings.ORDER_BOOK_SNAPSHOTS_COLLECTION]
+        self.trades_collection = self.market_db[settings.TRADES_COLLECTION]
+        self.order_book_snapshot_collection = self.market_db[settings.ORDER_BOOK_SNAPSHOTS_COLLECTION]
 
         # Redis client.
         self.redis = redis.StrictRedis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB)

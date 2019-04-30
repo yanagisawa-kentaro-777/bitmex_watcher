@@ -14,7 +14,7 @@ INSTANCE_NAME = "WATCHER_NODE"
 
 MONGO_DB_URI = "mongodb://mongo:27017/"
 
-BITMEX_DB = "bitmex_data"
+MARKET_DB = "market"
 TRADES_COLLECTION = "trades"
 TRADES_CURSOR_COLLECTION = "trades_cursor"
 ORDER_BOOK_SNAPSHOTS_COLLECTION = "order_book_snapshots"

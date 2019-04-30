@@ -51,13 +51,13 @@ class MarketWatcher:
         # MongoDB client.
         logger.info("Connecting to %s" % settings.MONGO_DB_URI)
         self.mongo_client = pymongo.MongoClient(settings.MONGO_DB_URI)
-        self.bitmex_db = self.mongo_client[settings.BITMEX_DB]
+        self.market_db = self.mongo_client[settings.MARKET_DB]
         # Create indices and set caps to collections.
         self._initialize_db_scheme()
         # Collections to save data in.
-        self.trades_collection = self.bitmex_db[settings.TRADES_COLLECTION]
-        self.order_book_snapshot_collection = self.bitmex_db[settings.ORDER_BOOK_SNAPSHOTS_COLLECTION]
-        self.trades_cursor_collection = self.bitmex_db[settings.TRADES_CURSOR_COLLECTION]
+        self.trades_collection = self.market_db[settings.TRADES_COLLECTION]
+        self.order_book_snapshot_collection = self.market_db[settings.ORDER_BOOK_SNAPSHOTS_COLLECTION]
+        self.trades_cursor_collection = self.market_db[settings.TRADES_CURSOR_COLLECTION]
 
         # Redis client.
         self.redis = redis.StrictRedis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB)
@@ -78,18 +78,18 @@ class MarketWatcher:
         self.sanity_check()
 
     def _initialize_db_scheme(self):
-        collections = self.bitmex_db.list_collection_names()
+        collections = self.market_db.list_collection_names()
         if (settings.TRADES_COLLECTION in collections) and (settings.ORDER_BOOK_SNAPSHOTS_COLLECTION in collections):
             logger.info("MongoDB scheme is already initialized. Do nothing.")
         else:
             logger.info("INITIALIZING MongoDB scheme.")
-            self.bitmex_db.create_collection(settings.TRADES_COLLECTION,
+            self.market_db.create_collection(settings.TRADES_COLLECTION,
                                              capped=True, size=settings.MAX_TRADES_COLLECTION_BYTES)
-            self.bitmex_db[settings.TRADES_COLLECTION].create_index([("timestamp", pymongo.ASCENDING)])
+            self.market_db[settings.TRADES_COLLECTION].create_index([("timestamp", pymongo.ASCENDING)])
 
-            self.bitmex_db.create_collection(settings.ORDER_BOOK_SNAPSHOTS_COLLECTION,
+            self.market_db.create_collection(settings.ORDER_BOOK_SNAPSHOTS_COLLECTION,
                                              capped=True, size=settings.MAX_ORDER_BOOK_COLLECTION_BYTES)
-            self.bitmex_db[settings.ORDER_BOOK_SNAPSHOTS_COLLECTION].create_index([("timestamp", pymongo.ASCENDING)])
+            self.market_db[settings.ORDER_BOOK_SNAPSHOTS_COLLECTION].create_index([("timestamp", pymongo.ASCENDING)])
             logger.info("INITIALIZED MongoDB scheme.")
 
     def sanity_check(self):
